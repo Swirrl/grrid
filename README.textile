@@ -1,3 +1,28 @@
-Javascript grid control using Prototype.js.
+h1. grrid
 
-More info coming soon.
+h3. A Javascript grid control using Prototype.js.
+
+Grrid is a pure javascript spreadsheet-like grid. You can edit the cells' contents inline (as opposed to pop-ups like in many other grid implementations).  It uses Google-maps style scrolling, so that the browser only needs to load the visible contents.  Edits are periodically synchronized with the server.
+
+This project is still just in its infancy, and there are a few features missing, so I wouldn't recommend using it in production just yet. If you want to contribute, or have any comments, please message me.
+
+h4. Dependencies
+
+* "Prototype.js":http://prototypejs.org (version 1.6+)
+
+h4. Targeted Browsers
+
+* Firefox 2+
+* IE 7
+* Safari 3+
+
+h4. TODOs
+
+* Column resizing
+* Different cursor style when selecting
+* Intelligent resizing of row number div
+* Keep user informed of current status/activity
+
+h4. How to use
+
+Coming soon....
