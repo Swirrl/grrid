@@ -6,6 +6,10 @@ Grrid is a pure javascript spreadsheet-like grid. You can edit the cells' conten
 
 This project is still just in its infancy, and there are a few features missing, so I wouldn't recommend using it in production just yet. If you want to contribute, or have any comments, please message me.
 
+h4. Licence
+
+Grrid is provided under the "MIT licence":http://www.opensource.org/licenses/mit-license.php.
+
 h4. Dependencies
 
 * "Prototype.js":http://prototypejs.org (version 1.6+)
@@ -22,6 +26,8 @@ h4. TODOs
 * Different cursor style when selecting
 * Intelligent resizing of row number div
 * Keep user informed of current status/activity
+* Tabbing between cells should cause the grid to scroll (and load new cells)
+* Select an entire row
 
 h4. How to use
 
