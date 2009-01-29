@@ -1,3 +1,7 @@
+// Grrid v0.1.0
+// Copyright (c) 2009 Swirrl IT Limited
+// Grrid is provided under an MIT-licence.
+
 // set up the namespace.
 var grrid;
 if (!grrid) grrid = {};
@@ -44,8 +48,6 @@ grrid.Grid = Class.create({
 
     lastFocusedCell: null, // the cell to last have focus
     changedCells: null, // will store a ChangedCellCollection object
-
-    visibleColumns: null, // a collection of data about the visible columns
 
     // CTOR:
 
