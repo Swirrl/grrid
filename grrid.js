@@ -108,15 +108,10 @@ grrid.Grid = Class.create({
     // PUBLIC INSTANCE METHODS:
 
     // insert a cell into the grid
-    insertCell: function(x, y, cellValue, thing_column_position, property_row_position, thing_name, property_name) {
+    insertCell: function(x, y, cellValue) {
         // make a cell, with the right coords and value
         var cell = new grrid.Cell(x, y);
         cell.setValue(cellValue);
-
-        cell.thing_column_position = thing_column_position;
-        cell.property_row_position = property_row_position;
-        cell.thing_name = thing_name;
-        cell.property_name = property_name;
 
         // add to our visible cells.
         this._visibleCells.add(x,y,cell);
