@@ -81,7 +81,8 @@ e.g. to initialize a grid when the DOM loads:
       '/grrid/set_inner_div_size', // inner div size url
       '/grrid/show/' // show url.
     );
-	grrid.myGrid.editMode = true; // this sets up the grid in edit mode. Omit if you want view-mode.</code></pre>
+	grrid.myGrid.editMode = true; // this sets up the grid in edit mode. Omit if you want view-mode.
+});</code></pre>
 
 On the server, you need to write code to accept calls to these urls (see the *Server Urls* section below)
 
