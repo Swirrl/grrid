@@ -667,12 +667,6 @@ grrid.Cell = Class.create({
     _cellName: "",
     _inputName: "",
 
-    // some public properties.
-    thing_column_position: null,
-    property_row_position: null,
-    thing_name: null,
-    property_name: null,
-
     // constructor for Cell class.
     // pass in the coords, and a ref to the grid to which it belogns.
     initialize: function(xCoord, yCoord) {
