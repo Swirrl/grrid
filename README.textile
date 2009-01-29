@@ -55,9 +55,9 @@ The outerDiv is effectively a viewport through which the user can see a portion 
 
 As the user scrolls around, cells are removed or added to the innerDiv, so that the visible part of the innerDiv is populated with cells and data.
 
-All you need to do is construct a grrid.Grid object with a set of urls.  These urls tell the grrid where it will get it's data (among other things).
+You need to instantiate a grrid.Grid object with a set of urls.  These urls tell the grrid where it will get it's data (among other things).
 
-The grid can operate in 2 modes: view mode, and edit mode.  In view mode, the contents are not editable.  In edit mode the cells are editable, and the grid will make periodic calls to the server to keep the it informed regarding edits have been made.  When the user wants to save, the you should call the saveUrl on the server to persist the changes.
+The grid can operate in 2 modes: view mode, and edit mode.  In view mode, the contents are not editable.  In edit mode the cells are editable, and the grid will make periodic calls to the server to keep it informed regarding any edits that have been made.  When the user wants to save, the you should call the saveUrl on the server to persist the changes.
 
 h3. How to use
 
@@ -123,7 +123,7 @@ h4. grrid.Grid.viewportHeight (property)
 
 Get or set the viewport height as an integer number of pixels.  Defaults to 300.
 
-h4. grrid.Grid.hightlightColor (property)
+h4. grrid.Grid.highlightColor (property)
 
 Get or set the colour to use for highlighting selected cells and columns, as a string with a CSS colour name. Defaults to "lemonChiffon".
 
