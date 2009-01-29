@@ -59,6 +59,8 @@ You need to instantiate a grrid.Grid object with a set of urls.  These urls tell
 
 The grid can operate in 2 modes: view mode, and edit mode.  In view mode, the contents are not editable.  In edit mode the cells are editable, and the grid will make periodic calls to the server to keep it informed regarding any edits that have been made.  When the user wants to save, the you should call the saveUrl on the server to persist the changes.
 
+Due to the way Prototype javascript 'classes' work, you can easily extend the various classes in grrid.js to have more properties and methods (for example, you can add other properties to the grrid.Cell class if you want a cell to be able to hold more information than just a value).
+
 h3. How to use
 
 
