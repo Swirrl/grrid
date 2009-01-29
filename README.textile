@@ -44,12 +44,10 @@ h3. Concept
 
 The concept behind grrid is very simple.  For the moment, at least, you need two divs on your page, specifically called innerDiv and outerDiv. Like this:
 
-<pre><code>
-<outerDiv>
+<pre><code><outerDiv>
   <innerDiv>
   </innerDiv>
-</outerDiv>
-</pre></code>
+</outerDiv></pre></code>
 
 The innerDiv will be sized so that the whole of your data grid will fit in it. For example, if you have 300 rows and 10 columns, and the cells are 100px wide and 20px high, innerDiv will be 1000x6000 pixels. 
 
@@ -74,8 +72,7 @@ Make a new grid by calling the constructor for grrid.Grid. This takes 5 argument
 * show url - the url which shows the grid (in view mode).
 
 e.g. to initialize a grid when the DOM loads:
-<pre><code>  
-  Event.observe(document, 'dom:loaded', function(){
+<pre><code>Event.observe(document, 'dom:loaded', function(){
 	grrid.myGrid = null;
     grrid.myGrid = new grrid.Grid(
       '/grrid/update_changed_cells/', //synchronization url
@@ -84,8 +81,7 @@ e.g. to initialize a grid when the DOM loads:
       '/grrid/set_inner_div_size', // inner div size url
       '/grrid/show/' // show url.
     );
-	grrid.myGrid.editMode = true; // this sets up the grid in edit mode. Omit if you want view-mode.
-</code></pre>
+	grrid.myGrid.editMode = true; // this sets up the grid in edit mode. Omit if you want view-mode.</code></pre>
 
 On the server, you need to write code to accept calls to these urls (see the *Server Urls* section below)
 
@@ -148,11 +144,9 @@ This is called during initialization of the grid and should expect 2 integer par
 
 Check your data store to see how many rows and columns the grid should have, and call some javascript which sets the style of the 'innerDiv' DOM element e.g. via RJS, if you're using rails:
 
-<pre><code>
-render :update do |page|
+<pre><code>render :update do |page|
   page<< "$('innerDiv').setStyle({width: '#{width}px', height: '#{height}px'});"
-end
-</pre></code>
+end</pre></code>
 
 h4. cellDataUrl
 
