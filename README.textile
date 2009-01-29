@@ -250,9 +250,6 @@ h3. Styling
 Just use CSS to style the grid how you want.  Below is some example CSS.  It's not beautiful, but it'll get you started.
 
 <pre><code><style type="text/css">
-  h1 {
-    font: 20pt sans-serif;
-  }
   #outerDiv {
     width: 815px; /* add on 15 for the scrollbars - visible area 800*/
     height: 315px; /* add on 15 for the scrollbars - visible area 400*/
@@ -282,13 +279,6 @@ Just use CSS to style the grid how you want.  Below is some example CSS.  It's n
     position: relative;
     overflow: hidden;
   }
-  #infoPanel {
-    border: 1px solid gray;
-    height: 315px;
-    margin-left:20px;
-    width: 200px;
-    float:left;
-  }
   input.grid-cell-input {
     font-size: 10px;
     border: none;
@@ -296,13 +286,11 @@ Just use CSS to style the grid how you want.  Below is some example CSS.  It's n
     padding:0;
     background-color: white;
   }
-  
   div.grid-cell {
     position:absolute;
     border-top: 1px solid gray;
     border-left: 1px solid gray;
   }
-  
 </style></code></pre>
 
 
