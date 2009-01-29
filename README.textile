@@ -28,6 +28,7 @@ h4. TODOs
 * Keep user informed of current status/activity
 * Tabbing between cells should cause the grid to scroll (and load new cells)
 * Select an entire row
+* Add the ability to paste from a spreadsheet
 
 h4. How to use
 
