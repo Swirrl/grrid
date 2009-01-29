@@ -10,7 +10,7 @@ h3. Features
 
 * Google-maps style scrolling (i.e. lazy loading of grid contents).
 * Periodic synchronization of data with server.
-* Hold down shift and move the mouse to select an area of cells.
+* Hold down shift and drag to select an area of cells.
 * Click on one of the column headers to select a column.
 
 h3. Licence
@@ -60,6 +60,7 @@ You need to instantiate a grrid.Grid object with a set of urls.  These urls tell
 The grid can operate in 2 modes: view mode, and edit mode.  In view mode, the contents are not editable.  In edit mode the cells are editable, and the grid will make periodic calls to the server to keep it informed regarding any edits that have been made.  When the user wants to save, the you should call the saveUrl on the server to persist the changes.
 
 h3. How to use
+
 
 h4. grrid.Grid constructor
 
@@ -137,16 +138,23 @@ Get or set the width of a cell as an integer number of pixels. Defaults to 100.
 
 h3. Server Urls
 
+This section details what should happen on the server when each of the 5 urls are called. The rails examples I've provided are not meant to be production-quality, but are instead just to give you an impression of how the server code might look.
+
 h4. innerDivSizeUrl
 
 This is called during initialization of the grid and should expect 2 integer parameters: 
 * cell_width (in pixels)
 * cell_height (in pixels) 
 
-Check your data store to see how many rows and columns the grid should have, and call some javascript which sets the style of the 'innerDiv' DOM element e.g. via RJS, if you're using rails:
+Check your data store to see how many rows and columns the grid should have, and call some javascript which sets the style of the 'innerDiv' DOM element e.g. if you're using rails:
 
-<pre><code>render :update do |page|
-  page<< "$('innerDiv').setStyle({width: '#{width}px', height: '#{height}px'});"
+<pre><code>def set_inner_div_size
+  height = @data_set.number_of_rows * params[:cell_height].to_i
+  width = @data_set.number_of_columns * params[:cell_width].to_i
+
+  render :update do |page|
+    page<<"$('innerDiv').setStyle({width: '#{width}px', height: '#{height}px'});"
+  end
 end</pre></code>
 
 h4. cellDataUrl
@@ -161,26 +169,141 @@ This should take the following parameters:
 * number_of_cells_x: how many cells across to show
 * number_of_cells_y: how many cells down to show
 
-The method should work out which cells you want to add/remove from the viewport, and then repeatedly make calls to removeCell() and insertCell() on your instance of grrid.Grid.  This url is called in exactly the same way in edit mode and view mode.  So your code needs to make sure it's fetching the right data.
+The method should work out which cells you want to add/remove from the viewport, and then repeatedly make calls to removeCell() and insertCell() on your instance of grrid.Grid.  This url is called in exactly the same way in edit mode and view mode.  So your code needs to make sure it's fetching the right data.  For example, in rails:
+
+<pre><code>def get_cells
+
+  # populate additional_cells variable with a collection of grid cells based on the old and new coordinates 
+  # and the size of the viewport.
+
+  # FILL IN YOUR CODE HERE, TAKING INTO ACCOUNT WHETHER WE'RE IN EDIT MODE.
+  # (i.e. if we're in edit mode, we should include the recent changes, if not, just used last saved version.)
+    
+  if (params[:old_x])
+    # if an old location is provided, populate cells_to_remove variable with a collection of cells to remove from 
+    # the grid, based on the old and new coordinates and the size of the viewport.
+
+    # FILL IN YOUR CODE HERE, TAKING INTO ACCOUNT WHETHER WE'RE IN EDIT MODE.
+  end
+
+  render :update do |page|
+    # add new cells
+    additional_cells.each do |cell|
+      
+      page.call 'grrid.dataSetGrid.insertCell',
+          cell.column_position,
+          cell.row_position,
+          cell.cell_value
+    end
+
+    # remove the old cells
+    if cells_to_remove
+      cells_to_remove.each do |cell|
+        page.call 'grrid.dataSetGrid.removeCell', cell.column_position, cell.row_position
+      end
+    end
+  end
+end</code></pre>
 
 h4. synchronizationUrl
 
 This is called periodically by the client, to inform the server of changes to cell contents during edit mode.
 
-The client will send a bunch of parameters in a hash, with the cell coordinates as the key (e.g. "1,4") and the cells' new contents as the values.  You should write code to keep track of this changed data which is waiting to be saved (but may be discarded if the user chooses not to save).
+The client will send a bunch of parameters in a hash, with the cell coordinates as the key (e.g. "1,4") and the cells' new contents as the values.  You should write code to keep track of this changed data which is waiting to be saved (but may be discarded if the user chooses not to save). For example, in rails:
+
+<pre><code>def update_changed_cells
+  coords_regex = Regexp.new("^[0-9]+,[0-9]+$")
+  
+  # loop through all the params which are of the form x,y where x and y are numbers
+  params.keys.each do |param_key|
+    if coords_regex.match(param_key)
+	  # DO SOMETHING HERE TO UPDATE THE SERVER'S COPY OF THE CELLS.
+    end
+  end
+
+  render :nothing=>true
+end</code></pre>
 
 h4. saveUrl
 
 No parameters
 
-When the client calls this url, it is telling the server that it wants to save the current representation of the grid.  Do whatever you need to do to make permanent the server's current representation of the data (which has been kept up to date by all the previous synchronizations).
+When the client calls this url, it is telling the server that it wants to save the current representation of the grid.  Do whatever you need to do to make permanent the server's current representation of the data (which has been kept up to date by all the previous synchronizations). Rails e.g.:
+
+<pre><code>def save
+  # DO SOMETHING TO PERMANENTLY SAVE THE SERVER'S COPY OF THE CELLS
+  render :nothing=>true
+end</code></pre>
 
 h4. showUrl
 
 This is simply the url that you want to redirect to once the data has been saved (i.e. to show the grid in view mode).
+You can also implement an edit action if you like, or just use the same action for show and edit and use instance variables to control the state of the grid. e.g.
 
+<pre><code>def show
+  # JUST POPULATE YOUR INSTANCE VARIABLES, 
+  # WHICH MIGHT INCLUDE ONE TO INDICATE WHETHER WE'RE IN EDIT MODE.
+end</code></pre>
 
+h3. Styling
 
+Just use CSS to style the grid how you want.  Below is some example CSS.  It's not beautiful, but it'll get you started.
+
+<pre><code><style type="text/css">
+  h1 {
+    font: 20pt sans-serif;
+  }
+  #outerDiv {
+    width: 815px; /* add on 15 for the scrollbars - visible area 800*/
+    height: 315px; /* add on 15 for the scrollbars - visible area 400*/
+    border: 1px solid black;
+    position: relative;
+    overflow: scroll; /* set this to hidden if don't want scrollbars */
+    float:left;
+  }
+  #innerDiv {
+    position: relative;
+    left: 0px;
+    top: 0px;
+  }
+  #columnIndicators {
+    border: 1px solid gray;
+    height: 20px;
+    width: 815px;
+    margin-left:22px;
+    position: relative;
+    overflow: hidden;
+  }
+  #rowIndicators {
+    border: 1px solid gray;
+    height: 315px;
+    width: 20px;
+    float:left;
+    position: relative;
+    overflow: hidden;
+  }
+  #infoPanel {
+    border: 1px solid gray;
+    height: 315px;
+    margin-left:20px;
+    width: 200px;
+    float:left;
+  }
+  input.grid-cell-input {
+    font-size: 10px;
+    border: none;
+    font-family:verdana;
+    padding:0;
+    background-color: white;
+  }
+  
+  div.grid-cell {
+    position:absolute;
+    border-top: 1px solid gray;
+    border-left: 1px solid gray;
+  }
+  
+</style></code></pre>
 
 
 
