@@ -42,9 +42,11 @@ h3. TODOs
 
 h3. Concept
 
-The concept behind grrid is very simple.  For the moment, at least, you need two divs on your page, specifically called innerDiv and outerDiv. Like this:
+The concept behind grrid is very simple.  For the moment, at least, you need a few divs on your page, specifically called innerDiv and outerDiv, and also a couple of other divs to hold the row/col indicators. Like this:
 
-<pre><code><outerDiv>
+<pre><code><div id="columnIndicators"></div>
+<div id="rowIndicators"></div>
+<outerDiv>
   <innerDiv>
   </innerDiv>
 </outerDiv></pre></code>
