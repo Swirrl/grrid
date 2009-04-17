@@ -1,4 +1,4 @@
-// Grrid v0.2.0
+// Grrid v0.2.1
 // Copyright (c) 2009 Swirrl IT Limited
 // Grrid is provided under an MIT-licence.
 
