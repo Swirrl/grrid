@@ -1,4 +1,4 @@
-// Grrid v0.2.1
+// Grrid v0.2.2
 // Copyright (c) 2009 Swirrl IT Limited
 // Grrid is provided under an MIT-licence.
 
@@ -20,11 +20,9 @@ grrid.Grid = Class.create({
     _periodicalUpdater: null, // periodical updater for sending data to svr.
 
     // PUBLIC PROPERTIES
-    visibleColumns: null, // will store a VisibleColumnCollection object. 
-    selectedColumn: null, // the column that's currently selected, if any.
     cellHeight: 18,
     cellWidth: 100,
-    viewportWidth: 780, // the width and height of the view port, with defaults
+    viewportWidth: 935, // the width and height of the view port, with defaults
     viewportHeight: 280,
     outerDivBorderWidth: 1,
     outerDiv: null,  // a reference to the outerDiv and innerDiv.
@@ -37,7 +35,7 @@ grrid.Grid = Class.create({
     // constructor for Grid class.
     initialize: function() {
     },
-    
+
     // PUBLIC INSTANCE METHODS:
 
     // actually do the work of setting up the grid.
@@ -55,7 +53,6 @@ grrid.Grid = Class.create({
         this._setGridExtentUrl = setGridExtentUrl;
 
         // initialize the changed and visible cells collecitons.
-        this.visibleColumns = new grrid.VisibleColumnCollection(this);
         this._visibleCells = new grrid.VisibleCellCollection(this);
         this.changedCellValues = new grrid.ChangedCellValueCollection(this);
 
@@ -82,6 +79,7 @@ grrid.Grid = Class.create({
         this._periodicalUpdater = new PeriodicalExecuter( function(){
             this.changedCellValues.synchronize();
         }.bind(this), 10 );
+
     },
 
     getTotalNumberOfRows: function() {
@@ -143,17 +141,7 @@ grrid.Grid = Class.create({
     },
 
 
-    // insert a column into our collection of known columns
-    insertColumn: function(position) {
-        var column = new grrid.Column(position);
-        this.visibleColumns.add(position, column);
-        return column;
-    },
 
-    // remove a column from our collection of known cols
-    removeColumn: function(position) {
-        this.visibleColumns.remove(position);
-    },
 
 
     // save the current state of sthe grid.
@@ -173,23 +161,23 @@ grrid.Grid = Class.create({
     },
 
     setVerticalExtent: function(verticalExtentInPx) {
-        $('innerDiv').setStyle({ 
+        $('innerDiv').setStyle({
             height: verticalExtentInPx.toString() + 'px'
         });
-        $('innerRowIndicatorsDiv').setStyle({ 
+        $('innerRowIndicatorsDiv').setStyle({
             height: verticalExtentInPx.toString() + 'px'
         });
     },
 
     setHorizontalExtent: function(horizontalExtentInPx) {
-        $('innerDiv').setStyle({ 
+        $('innerDiv').setStyle({
             width: horizontalExtentInPx.toString() + 'px'
         });
-        $('innerColumnIndicatorsDiv').setStyle({ 
+        $('innerColumnIndicatorsDiv').setStyle({
             width: horizontalExtentInPx.toString() + 'px'
         });
     },
-    
+
     // PRIVATE INSTANCE METHODS
 
     _startSyncPeriodicalUpdater: function() {
@@ -311,7 +299,7 @@ grrid.Grid = Class.create({
         }
 
         return visibleColumnIndicatorsArray;
-              
+
     },
 
     _getVisibleRowIndicators: function() {
@@ -337,7 +325,7 @@ grrid.Grid = Class.create({
         }
 
         return visibleRowIndicatorsArray;
-        
+
     },
 
 
@@ -356,7 +344,7 @@ grrid.Grid = Class.create({
         var visibleColumnIndicatorsMap = {};
 
         for (i = 0; i < visibleColumnIndicators.length; i++) {
-            
+
             var columnIndicatorIndex = visibleColumnIndicators[i];
             var columnIndicatorName = "columnIndicator-" + columnIndicatorIndex;
             visibleColumnIndicatorsMap[columnIndicatorName] = true;
@@ -459,7 +447,7 @@ grrid.Grid = Class.create({
 
         return newIndicator;
     },
- 
+
     // what cell is under the passed mouse pixel coords?
     _calculateWhichCell: function(xCoord, yCoord) {
         // what's the scroll amounts?
@@ -491,7 +479,7 @@ grrid.Grid = Class.create({
             }
         }
     },
-    
+
     _generateIndicators: function() {
         this._checkColumnIndicators();
         this._checkRowIndicators();
@@ -499,9 +487,9 @@ grrid.Grid = Class.create({
 
     // a func to actually get the cell data from the server, via ajax.
     _checkCellsAjax: function(){
-        
+
         if (!this._checkingCells)
-        {            
+        {
             // mark us as checking.
             this._checkingCells = true;
 
@@ -527,7 +515,7 @@ grrid.Grid = Class.create({
             // if not at origin, subtract 1 to make it load the cells a bit early - for smoothness
             if (startX-1 >= 0) startX=startX-1;
             if (startY-1 >= 0) startY=startY-1;
-        
+
             this._currentTopLeft = [startX,startY];
 
             if ((this._prevTopLeft==null) ||
@@ -575,12 +563,11 @@ grrid.Grid = Class.create({
 
     // override if you want to do something special when starting to check cells.
     _checkCellsAjaxCreate: function(transport) {
-	  // by default, this does nothing.	
+	  // by default, this does nothing.
     },
 
     _checkCellsAjaxComplete: function(transport) {
         this._prevTopLeft = this._currentTopLeft;
-        this.visibleColumns.rewireEvents();
         this._checkingCells = false; // mark us as not checking any more.
         this._showHideFetchingDataIndicator(false);
     },
@@ -616,7 +603,7 @@ grrid.Grid = Class.create({
         }
 
     },
-   
+
     // what to do when we get a scroll event
     _processScroll: function(event) {
         this._generateIndicators();
@@ -668,7 +655,7 @@ grrid.Cell = Class.create({
     _value: null, // the value in the cell
 
     _oldValue: null,
-    
+
     // cell name and input name
     _cellName: "",
     _inputName: "",
@@ -703,7 +690,7 @@ grrid.Cell = Class.create({
 
     // add this cell to the grid passed.
     addToGrid: function(grid) {
-           
+
         // before isnerting, check for unsynched data for this cell
         var unsynchedCellValue = grid.changedCellValues.getValue(this._x,this._y);
         if (unsynchedCellValue != null){
@@ -719,7 +706,7 @@ grrid.Cell = Class.create({
         });
 
         this._setInputClass(grid, theInput);
-        
+
         // wire up observers, making sure we have the correct bindings. The first object we're passing
         // to the event listener is the current instance of our cell object (this).
         // see: http://alternateidea.com/blog/articles/2007/7/18/javascript-scope-and-binding
@@ -730,8 +717,8 @@ grrid.Cell = Class.create({
 
         // set the input's style.
         theInput.setStyle({
-            height: (grid.cellHeight-1).toString() + "px",
-            width: (grid.cellWidth-1).toString() + "px"
+            height: (grid.cellHeight-2).toString() + "px",
+            width: (grid.cellWidth-2).toString() + "px"
         });
 
         var cellClass = "grid-cell cell-row" + this._y.toString() + " cell-col" + this._x.toString();
@@ -772,7 +759,7 @@ grrid.Cell = Class.create({
     removeFromGrid: function(grid) {
         var cellName = grrid.Grid.generateCellNameFromCoords(this._x, this._y);
         var thisCell = $(cellName);
-        
+
         // if this cell was the last one to gain focus, make sure we store any changes to it before removing it.
         if (grid.lastFocusedCell != null && this.isSameCell(grid.lastFocusedCell)) {
             var theInput = thisCell.down('input');
@@ -781,7 +768,7 @@ grrid.Cell = Class.create({
                 grid.storeChangedCellValue(this);
             }
         }
-        
+
         // actually do the removal from the dom
         thisCell.remove();
 
@@ -844,9 +831,9 @@ grrid.Cell = Class.create({
 
 
     },
-    
+
     _textFieldKeyDown: function(event) {
-        
+
         if (event.keyCode == Event.KEY_DOWN || event.keyCode == Event.KEY_RETURN) {
             Event.stop(event);
             var inputDown = $( grrid.Grid.generateInputNameFromCoords( this.getX(), this.getY()+1 ));
@@ -868,7 +855,7 @@ grrid.Cell = Class.create({
             if (inputRight != null) {
                 Form.Element.activate(inputRight);
             }
-            
+
         }
         else if(event.keyCode == Event.KEY_LEFT) {
             Event.stop(event);
@@ -907,7 +894,7 @@ grrid.Column = Class.create({
         if (colIndicatorDiv) {
             colIndicatorDiv.observe('click', this._selectColumn.bindAsEventListener(this, grid));
         }
-      
+
     },
 
     unwireEvents: function() {
@@ -959,48 +946,7 @@ grrid.VisibleCellCollection = Class.create({
     getCell: function(x,y) {
         return this._visibleCells.get([x,y]);
     }
-    
-});
 
-// class to hold a collection of grid columns, which are visible in the grid.
-grrid.VisibleColumnCollection = Class.create();
-Object.extend(grrid.VisibleColumnCollection.prototype, Enumerable); // mix in enumerable
-Object.extend(grrid.VisibleColumnCollection.prototype, {
-
-    _visibleColumns: $H({}),
-    _grid: null,
-
-    initialize: function(grid) {
-        this._grid = grid;
-    },
-
-    // the iterator for enumerable for
-    _each: function(iterator) {
-        this._visibleColumns.each( function(column) {
-            iterator(column);
-        });
-    },
-
-    add: function(position, column) {
-        this._visibleColumns.set(position, column);
-    },
-    
-    remove: function(position) {
-        this._visibleColumns.unset(position);
-    },
-
-    getColumn: function(position) {
-        return this._visibleColumns.get(position);
-    },
-
-    // cause all of the columns in the collection to have their events re wired up.
-    rewireEvents: function() {
-        this._visibleColumns.each(function(pair) {
-            pair.value.unwireEvents(this._grid);
-            pair.value.wireEvents(this._grid);            
-        }.bind(this));
-
-    }
 });
 
 
@@ -1034,7 +980,7 @@ grrid.ChangedCellValueCollection = Class.create({
 
     // synchronize this collection with the server.
     synchronize: function(){
-        
+
         // only bother doing anything if there are any changed cells.
         if (this._changedCellValues.keys().length > 0) {
 
