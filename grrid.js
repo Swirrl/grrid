@@ -1,4 +1,4 @@
-// Grrid v0.1.0
+// Grrid v0.2.0
 // Copyright (c) 2009 Swirrl IT Limited
 // Grrid is provided under an MIT-licence.
 
@@ -9,76 +9,62 @@ if (!grrid) grrid = {};
 grrid.Grid = Class.create({
 
     // PRIVATE properties
-    _selecting: false, // are we currently selecting?
-    _selectedCells: [], // an array of the currently selected cell coordinates
-    _selectStartCoords: null, // start and end coordinates of a selection
-    _selectEndCoords: null,
-    _selectedColumnIndex: null, // the index of the selected column, if any
-
     _checkingCells: false, // are we currently checking the cells?
     _intervalId: null, // the interval id used for the check-cells retry mechanism
     _checkCellsPeriodicalExecuter: null,
-
+    _generateIndicatorsPeriodicalExecuter: null,
     _currentTopLeft: [0,0], // the coords of the cell at the top-left of the visible grid.
     _prevTopLeft: null, // the cell that was PREVIOUSLY at the top-left of the visible grid
-
-    _numberOfCellsX: 0,
-    _numberOfCellsY: 0,
-
     _visibleCells: null, // will store a VisibleCellCollection object.
-
-    _lastFocusedInputCoords: null, // the last cell to have focus,
     _oldCellValue: null, // the old value of the recently changed cell
     _periodicalUpdater: null, // periodical updater for sending data to svr.
-    
+
     // PUBLIC PROPERTIES
-
-    editMode: false,
-
+    visibleColumns: null, // will store a VisibleColumnCollection object. 
+    selectedColumn: null, // the column that's currently selected, if any.
     cellHeight: 18,
     cellWidth: 100,
-
-    viewportWidth: 800, // the width of the view port, defaulted to 800px
-    viewportHeight: 300,
+    viewportWidth: 780, // the width and height of the view port, with defaults
+    viewportHeight: 280,
     outerDivBorderWidth: 1,
-    highlightColor: "lemonChiffon",
-
     outerDiv: null,  // a reference to the outerDiv and innerDiv.
     innerDiv: null,
-
     lastFocusedCell: null, // the cell to last have focus
     changedCells: null, // will store a ChangedCellCollection object
 
     // CTOR:
 
     // constructor for Grid class.
-    initialize: function(
+    initialize: function() {
+    },
+    
+    // PUBLIC INSTANCE METHODS:
+
+    // actually do the work of setting up the grid.
+    // we don't do this in the ctor, as some of the set up requires the instance to exist first
+    setUpGrid: function(
         synchronizationUrl,
         cellDataUrl,
         saveUrl,
-        innerDivSizeUrl,
-        showUrl
-    ){
-            
+        setGridExtentUrl
+        ){
+
         this.synchronizationUrl = synchronizationUrl;
         this._cellDataUrl = cellDataUrl;
         this._saveUrl = saveUrl;
-        this._innerDivSizeUrl = innerDivSizeUrl;
-        this._showUrl = showUrl;
+        this._setGridExtentUrl = setGridExtentUrl;
 
         // initialize the changed and visible cells collecitons.
+        this.visibleColumns = new grrid.VisibleColumnCollection(this);
         this._visibleCells = new grrid.VisibleCellCollection(this);
         this.changedCellValues = new grrid.ChangedCellValueCollection(this);
 
         // call the function to set the inner div's size.
-        this._setInnerDivSize();
+        this._setGridExtent();
 
         // get a ref to the outerDiv and innerdiv elements, as they're commonly req'd in the code.
         this.outerDiv = $('outerDiv');
         this.innerDiv = $('innerDiv');
-
-        this._numberOfCellsX = this._getNumberOfCellsX();
-        this._numberOfCellsY = this._getNumberOfCellsY();
 
         // reset the scrolling
         this.outerDiv.scrollTop = 0;
@@ -87,17 +73,47 @@ grrid.Grid = Class.create({
         // wire up event handlers
         this._wireEvents();
 
-        // call check cells to populate the cells
-        this._checkCells();
+        this.setRowIndicatorsWidth();
 
-        // finally, calculate and show the row and col indicators
-        this._generateRowIndicators();
-        this._generateColumnIndicators();
+        // note that this has the side effect of generating the column indicators and getting all the cells.
+        this._setViewPortSize();
 
-        // start the periodical updater going.
+        // start the periodical updater going, for synching cell values with server
         this._periodicalUpdater = new PeriodicalExecuter( function(){
             this.changedCellValues.synchronize();
         }.bind(this), 10 );
+    },
+
+    getTotalNumberOfRows: function() {
+        var innerDivHeight = parseInt(this.innerDiv.getStyle('height'));
+        return innerDivHeight / this.cellHeight;
+    },
+
+    getTotalNumberOfColumns: function() {
+        var innerDivWidth = parseInt(this.innerDiv.getStyle('width'));
+        return innerDivWidth / this.cellWidth;
+    },
+
+
+    // set the width of the row indicators div
+    setRowIndicatorsWidth: function() {
+
+        var noOfChars = this.getTotalNumberOfRows().toString().length;
+        var charWidth = 10;
+        var totalWidth = noOfChars*charWidth + 20;
+
+        var rowIndicators = $('outerRowIndicatorsDiv');
+        rowIndicators.setStyle({
+            width: totalWidth + 'px'
+        });
+
+        var rowIndicatorsMargin = parseInt(rowIndicators.getStyle('marginLeft'));
+        totalWidth += rowIndicatorsMargin;
+
+        $('outerColumnIndicatorsDiv').setStyle({
+            marginLeft: (totalWidth + 2).toString() + 'px'
+        });
+
     },
 
 
@@ -107,9 +123,9 @@ grrid.Grid = Class.create({
         this.changedCellValues.update(cell.getX(), cell.getY(), cell.getValue());
     },
 
-    // PUBLIC INSTANCE METHODS:
 
     // insert a cell into the grid
+    // returns the cell itself.
     insertCell: function(x, y, cellValue) {
         // make a cell, with the right coords and value
         var cell = new grrid.Cell(x, y);
@@ -117,6 +133,8 @@ grrid.Grid = Class.create({
 
         // add to our visible cells.
         this._visibleCells.add(x,y,cell);
+
+        return cell;
     },
 
     // remove the cell at the coordinates given.
@@ -125,7 +143,20 @@ grrid.Grid = Class.create({
     },
 
 
-    // save the current state of the grid.
+    // insert a column into our collection of known columns
+    insertColumn: function(position) {
+        var column = new grrid.Column(position);
+        this.visibleColumns.add(position, column);
+        return column;
+    },
+
+    // remove a column from our collection of known cols
+    removeColumn: function(position) {
+        this.visibleColumns.remove(position);
+    },
+
+
+    // save the current state of sthe grid.
     saveData: function() {
         // stop the periodical updater.
         this._periodicalUpdater.stop();
@@ -136,23 +167,107 @@ grrid.Grid = Class.create({
         // now call the save method, synchronously.
         new Ajax.Request(this._saveUrl, {
             method: 'post',
-            asynchronous: false,
-            onSuccess: function() {
-                // on success, redirect to just SHOWing the data set.
-                window.location = this._showUrl;
-            }
+            asynchronous: false
         });
 
     },
 
+    setVerticalExtent: function(verticalExtentInPx) {
+        $('innerDiv').setStyle({ 
+            height: verticalExtentInPx.toString() + 'px'
+        });
+        $('innerRowIndicatorsDiv').setStyle({ 
+            height: verticalExtentInPx.toString() + 'px'
+        });
+    },
+
+    setHorizontalExtent: function(horizontalExtentInPx) {
+        $('innerDiv').setStyle({ 
+            width: horizontalExtentInPx.toString() + 'px'
+        });
+        $('innerColumnIndicatorsDiv').setStyle({ 
+            width: horizontalExtentInPx.toString() + 'px'
+        });
+    },
+    
     // PRIVATE INSTANCE METHODS
 
+    _startSyncPeriodicalUpdater: function() {
+        // start the periodical updater going.
+        this._periodicalUpdater = new PeriodicalExecuter( function(){
+            this.changedCellValues.synchronize();
+        }.bind(this), 10 );
+    },
+
+    _stopSyncPeriodicalUpdater: function() {
+        this._periodicalUpdater.stop();
+    },
+
+    _windowResize: function(event) {
+        this._setViewPortSize();
+    },
+
+    _setViewPortSize: function() {
+
+        if (this.lastFocusedCell != null) {
+            // force loss of focus of the currently focused cell - this will cause it's value to be stored if it's changed.
+            var focusedInputName = grrid.Grid.generateInputNameFromCoords(this.lastFocusedCell.getX(), this.lastFocusedCell.getY() );
+            var focusedInput = $(focusedInputName);
+            if (focusedInput != null) {
+                focusedInput.blur();
+            }
+        }
+
+        this._setOuterDivSize();
+
+        // make the row and col indicators
+        this._generateIndicators();
+
+        // whenever the outer div size changes, also set the grid progress location accordingly too.
+        var gridProgress = $('gridProgress');
+
+        var gridProgressWidth = parseInt(gridProgress.getStyle('width'));
+        var gridProgressHeight = parseInt(gridProgress.getStyle('height'));
+
+        var offsetLeft = this.outerDiv.offsetLeft + (this.viewportWidth / 2) - (gridProgressWidth / 2 );
+        var offsetTop = this.outerDiv.offsetTop + (this.viewportHeight / 2) - (gridProgressHeight / 2 );
+
+        gridProgress.setStyle({
+            left: offsetLeft+'px',
+            top: offsetTop+'px'
+        });
+
+        // populate the grid
+        this._redrawGridContents();
+    },
+
+    _setOuterDivSize: function() {
+      // override to customize the setting of the outer div's size
+    },
+
+    _redrawGridContents: function() {
+
+        var cells = $$('.grid-cell');
+
+        // remove all teh cells.
+        cells.each( function(cell) {
+            cell.remove();
+        });
+
+        // null out the previous top left coordinate.  this allows us to get the cells even though we've not moved.
+        this._prevTopLeft = null;
+
+        // call check cells to populate the cells
+        this._checkCells();
+
+    },
+
     // a utility function to set the size of the inner div.
-    _setInnerDivSize: function(){
-        var url = this._innerDivSizeUrl;
+    _setGridExtent: function(){
+        var url = this._setGridExtentUrl;
 
         new Ajax.Request(url, {
-            method: 'post',
+            method: 'get',
             parameters: {
                 cell_height: this.cellHeight,
                 cell_width: this.cellWidth
@@ -163,204 +278,188 @@ grrid.Grid = Class.create({
 
     // wire up the events for this grid.
     _wireEvents: function(){
-
-        // wire up observers, making sure we have the correct bindings. The first object we're passing
-        // to the event listener is the current instance of our grid object (this).
-        // see: http://alternateidea.com/blog/articles/2007/7/18/javascript-scope-and-binding
-        // and: http://www.prototypejs.org/api/function/bindAsEventListener
-
         this.outerDiv.observe('scroll', this._processScroll.bindAsEventListener(this));
         this.outerDiv.observe('mousedown', this._mouseDown.bindAsEventListener(this));
-        // we observe mouse movement anywhere, so that we can scroll by moving outside the grid
-        Event.observe(document, 'mousemove', this._mouseMove.bindAsEventListener(this));
-        this.outerDiv.observe('mouseup', this._mouseUp.bindAsEventListener(this));
+        Event.observe(window, 'resize', this._windowResize.bindAsEventListener(this));
     },
+
 
     // calculate and show the correct row indicators.
-    _generateRowIndicators: function() {
 
-        var startingRowNumber = Math.floor(this.outerDiv.scrollTop / this.cellHeight);
-        var startingRowAdjustment = this.outerDiv.scrollTop%this.cellHeight;
 
-        // calculate the number of visible rows.
-        var numberOfVisibleRows = this._numberOfCellsY;
+    // returns an array of column positions that should be visible, based on the current scrollage.
+    _getVisibleColumnIndicators: function() {
 
-        // calc total number of rows.
-        var innerDivHeight = parseInt(this.innerDiv.getStyle('height'));
-        var totalNumberOfRows = innerDivHeight / this.cellHeight;
+        var outerColumnIndicatorsDiv = $('outerColumnIndicatorsDiv');
 
-        // now insert the right cells into the div
-        var rowIndicatorsDiv = $("rowIndicators");
+        var scrollX = outerColumnIndicatorsDiv.scrollLeft;
+        var startingColumn = Math.abs(Math.floor(scrollX / this.cellWidth));
 
-        // first clear the div of any other stuff
-        var currentRowIndicators = $$("div#rowIndicators div.rowIndicator");
-        currentRowIndicators.each(function(item) {
-            item.remove();
-        }
-        );
+        // if not at origin, subtract 1 to make it load the cells a bit early - for smoothness
+        if (startingColumn-1 >= 0) startingColumn=startingColumn-1
 
-        var topPosition = (0 - startingRowAdjustment);
-        for (var index = startingRowNumber; index < numberOfVisibleRows + startingRowNumber; ++index) {
+        // this is the actual number of cells in the grid.
+        var totalIndicators = this.getTotalNumberOfColumns();
+        var numberOfVisibleColumns = this._getNumberOfCellsX() + 2;
+        var visibleColumnIndicatorsArray = [];
 
-            if (index < totalNumberOfRows) {
-                var newIndicator = new Element('div', {
-                    'class': 'rowIndicator'
-                });
-
-                newIndicator.setStyle({
-                    padding: "0px",
-                    margin: "0px",
-                    top: topPosition.toString() + "px",
-                    position: "absolute",
-                    height:(this.cellHeight).toString() + "px"
-                });
-
-                newIndicator.update(index.toString());
-                rowIndicatorsDiv.insert({
-                    bottom: newIndicator
-                });
-                topPosition = topPosition + this.cellHeight;
+        counter = 0;
+        for (var index = startingColumn; index < numberOfVisibleColumns + startingColumn; index++) {
+            if ( index < totalIndicators ) {
+                visibleColumnIndicatorsArray[counter++] = index;
             }
         }
+
+        return visibleColumnIndicatorsArray;
+              
     },
+
+    _getVisibleRowIndicators: function() {
+
+        var outerRowIndicatorsDiv = $('outerRowIndicatorsDiv');
+
+        var scrollY = outerRowIndicatorsDiv.scrollTop;
+        var startingRow = Math.abs(Math.floor(scrollY / this.cellHeight));
+
+        // if not at origin, subtract 1 to make it load the cells a bit early - for smoothness
+        if (startingRow-1 >= 0) startingRow=startingRow-1
+
+        // this is the actual number of cells in the grid.
+        var totalIndicators = this.getTotalNumberOfRows();
+        var numberOfVisibleRows = this._getNumberOfCellsY() + 3;
+        var visibleRowIndicatorsArray = [];
+
+        counter = 0;
+        for (var index = startingRow; index < numberOfVisibleRows + startingRow; index++) {
+            if ( index < totalIndicators ) {
+                visibleRowIndicatorsArray[counter++] = index;
+            }
+        }
+
+        return visibleRowIndicatorsArray;
+        
+    },
+
 
     // calculate and show the correct column indicators
-    _generateColumnIndicators: function() {
+    _checkColumnIndicators: function() {
 
-        var startingColumnNumber = Math.floor(this.outerDiv.scrollLeft / this.cellWidth);
-        var startingColumnAdjustment = this.outerDiv.scrollLeft%this.cellWidth;
+        var outerColumnIndicatorsDiv = $('outerColumnIndicatorsDiv');
 
-        // calculate the number of visible cols.
-        var numberOfVisibleColumns = this._numberOfCellsX;
+        // first, set the scroll to match that of the outer div.
+        outerColumnIndicatorsDiv.scrollLeft = this.outerDiv.scrollLeft;
+        var visibleColumnIndicators = this._getVisibleColumnIndicators();
 
-        // calc total number of cols.
-        var innerDivWidth = parseInt(this.innerDiv.getStyle('width'));
-        var totalNumberOfCols = innerDivWidth / this.cellWidth;
+        // add each indicator to the column indicators inner div.
+        var innerColumnIndicatorsDiv = $('innerColumnIndicatorsDiv');
 
-        // now insert the right cells into the div
-        var columnIndicatorsDiv = $("columnIndicators");
+        var visibleColumnIndicatorsMap = {};
 
-        // first clear the div of any other stuff:
-        var currentColumnIndicators = $$("div#columnIndicators div.columnIndicator");
-        currentColumnIndicators.each(function(item) {
-            item.remove();
-        }
-        );
+        for (i = 0; i < visibleColumnIndicators.length; i++) {
+            
+            var columnIndicatorIndex = visibleColumnIndicators[i];
+            var columnIndicatorName = "columnIndicator-" + columnIndicatorIndex;
+            visibleColumnIndicatorsMap[columnIndicatorName] = true;
+            var columnIndicatorDiv = $(columnIndicatorName);
 
-        var leftPosition = (0 - startingColumnAdjustment);
-
-        for (var index = startingColumnNumber; index < numberOfVisibleColumns + startingColumnNumber; ++index) {
-
-            if ( index < totalNumberOfCols ) {
-                var newIndicator = new Element('div', {
-                    'class': 'columnIndicator'
-                });
-
-                newIndicator.setStyle({
-                    width: (this.cellWidth).toString() + "px",
-                    padding: "0px",
-                    margin: "0px",
-                    left: leftPosition.toString() + "px",
-                    position: "absolute",
-                    height:"18px"
-                });
-
-                // wire up observers, making sure we have the correct bindings. The first object we're passing
-                // to the event listener is the current instance of our grid object (this).
-                // see: http://alternateidea.com/blog/articles/2007/7/18/javascript-scope-and-binding
-                // and: http://www.prototypejs.org/api/function/bindAsEventListener
-               
-                newIndicator.observe('click', this._selectEntireColumn.bindAsEventListener(this, index) );
-
-                newIndicator.update(grrid.Grid.calculateColumnName(index));
-
-                columnIndicatorsDiv.insert({
-                    bottom: newIndicator
-                });
-                leftPosition = leftPosition + this.cellWidth;
+            // now add the indicator if it's not already there.
+            if (!columnIndicatorDiv) {
+                this._generateColumnIndicator(columnIndicatorIndex, (columnIndicatorIndex * this.cellWidth) );
             }
         }
 
-    },
-
-    // this function works out what cells we should highlight.
-    _highlightSelectedCells: function() {
-
-        // first, set all the visible cells to be not highlighted.
-        this._clearHighlightedCells();
-  
-
-        if(this._selectedColumnIndex != null){
-            // there is a column selected.
-
-            // highlight the cells in that column
-            var queryString = '#innerDiv input.input-col' + this._selectedColumnIndex.toString();
-            var cellsInColumn = $$(queryString);
-           
-            cellsInColumn.each(function(item) {
-                item.setStyle({
-                    backgroundColor: this.highlightColor
-                });
-            }.bind(this));
-
-        }
-        else {
-            this._selectedCells.each(function(item) {  
-                var inputName = grrid.Grid.generateInputNameFromCoords(item[0], item[1]);
-                var theInput = $(inputName);
-                if (theInput) {
-                    theInput.setStyle({
-                        backgroundColor: this.highlightColor
-                    });
-                }
-            }.bind(this));
-        }
-    },
-
-    // clear which cells are highlighted
-    _clearHighlightedCells: function() {
-        var visibleCellsInputs = $$('#innerDiv input.grid-cell-input');
-        visibleCellsInputs.each(function(item) {
-            item.setStyle({
-                backgroundColor:'white'
-            });
+        // remove unncessary ones
+        var existingColumnIndicators = innerColumnIndicatorsDiv.select('div.columnIndicator');
+        existingColumnIndicators.each( function(indicator) {
+            if(!visibleColumnIndicatorsMap[indicator.id]) {
+                indicator.remove();
+            }
         });
     },
 
-    _calculateSelectedCells: function(xStart, yStart, xEnd, yEnd) {
-  
-        // start off assuming at the end is larger than the start.
-        var smallestX = xStart;
-        var smallestY = yStart;
-        var largestX = xEnd;
-        var largestY = yEnd;
+    _checkRowIndicators: function() {
 
-        // if our assumption is wrong, swap.
-        if (xEnd < xStart) {
-            smallestX = xEnd;
-            largestX = xStart;
-        }
+        var outerRowIndicatorsDiv = $('outerRowIndicatorsDiv');
 
-        // likewise for Y coordinates
-        if (yEnd < yStart) {
-            smallestY = yEnd;
-            largestY = yStart;
-        }
+        // first, set the scroll to match that of the outer div.
+        outerRowIndicatorsDiv.scrollTop = this.outerDiv.scrollTop;
+        var visibleRowIndicators = this._getVisibleRowIndicators();
 
-        // reset the selected Cells array.
-        this._selectedCells = [];
-        var cellCounter = 0;
+        // add each indicator to the column indicators inner div.
+        var innerRowIndicatorsDiv = $('innerRowIndicatorsDiv');
 
-        // populate the selected cells..
-        for (y = smallestY; y <= largestY; y++) {
-            for (x = smallestX; x <= largestX; x++ ) {
-                this._selectedCells[cellCounter++] = [x,y];
+        var visibleRowIndicatorsMap = {};
+
+        for (i = 0; i < visibleRowIndicators.length; i++) {
+
+            var rowIndicatorIndex = visibleRowIndicators[i];
+            var rowIndicatorName = "rowIndicator-" + rowIndicatorIndex;
+            visibleRowIndicatorsMap[rowIndicatorName] = true;
+            var rowIndicatorDiv = $(rowIndicatorName);
+
+            // now add the indicator if it's not already there.
+            if (!rowIndicatorDiv) {
+                this._generateRowIndicator(rowIndicatorIndex, (rowIndicatorIndex * this.cellHeight) );
             }
         }
 
-        this._highlightSelectedCells();
+        // remove unncessary ones
+        var existingRowIndicators = innerRowIndicatorsDiv.select('div.rowIndicator');
+        existingRowIndicators.each( function(indicator) {
+            if(!visibleRowIndicatorsMap[indicator.id]) {
+                indicator.remove();
+            }
+        });
+
     },
-    
+
+    // function to generate just one col indicator.  returns the new indicator.
+    _generateColumnIndicator: function(index, leftPosition) {
+        var newIndicator = new Element('div', {
+            'id': 'columnIndicator-' + index.toString(),
+            'class': 'columnIndicator'
+        });
+
+        newIndicator.setStyle({
+            width: (this.cellWidth).toString() + "px",
+            padding: "0px",
+            margin: "0px",
+            left: leftPosition.toString() + "px",
+            position: "absolute"
+        });
+
+        newIndicator.update(grrid.Grid.calculateColumnName(index));
+
+        $("innerColumnIndicatorsDiv").insert({
+            bottom: newIndicator
+        });
+
+        return newIndicator;
+    },
+
+    // function to generate just one row indicator.  returns the new indicator.
+    _generateRowIndicator: function(index, topPosition) {
+        var newIndicator = new Element('div', {
+            'id': 'rowIndicator-' + index.toString(),
+            'class': 'rowIndicator'
+        });
+
+        newIndicator.setStyle({
+            padding: "0px",
+            margin: "0px",
+            top: topPosition.toString() + "px",
+            position: "absolute",
+            height:(this.cellHeight).toString() + "px"
+        });
+
+        newIndicator.update((index+1).toString());
+        $("innerRowIndicatorsDiv").insert({
+            bottom: newIndicator
+        });
+
+        return newIndicator;
+    },
+ 
     // what cell is under the passed mouse pixel coords?
     _calculateWhichCell: function(xCoord, yCoord) {
         // what's the scroll amounts?
@@ -377,7 +476,6 @@ grrid.Grid = Class.create({
 
         // returns a cell position in format x,y
         return [cellX, cellY];
-
     },
 
     // This func call an ajax func to check cells when it's ok to do so
@@ -394,12 +492,16 @@ grrid.Grid = Class.create({
         }
     },
     
+    _generateIndicators: function() {
+        this._checkColumnIndicators();
+        this._checkRowIndicators();
+    },
 
     // a func to actually get the cell data from the server, via ajax.
     _checkCellsAjax: function(){
         
         if (!this._checkingCells)
-        {
+        {            
             // mark us as checking.
             this._checkingCells = true;
 
@@ -411,8 +513,10 @@ grrid.Grid = Class.create({
                 this._checkCellsPeriodicalExecuter = null;
             }
 
+            this._showHideFetchingDataIndicator(true);
+
             // get the current top left location.
-            var outerDiv = $("outerDiv");
+            var outerDiv = this.outerDiv;
             var scrollX = outerDiv.scrollLeft;
             var scrollY = outerDiv.scrollTop;
 
@@ -421,13 +525,9 @@ grrid.Grid = Class.create({
             var startY = Math.abs(Math.floor(scrollY / this.cellHeight));
 
             // if not at origin, subtract 1 to make it load the cells a bit early - for smoothness
-            if (startX-2 >= 0) {
-                startX=startX-1;
-            }
-            if (startY-2 >= 0) {
-                startY=startY-1;
-            }
-
+            if (startX-1 >= 0) startX=startX-1;
+            if (startY-1 >= 0) startY=startY-1;
+        
             this._currentTopLeft = [startX,startY];
 
             if ((this._prevTopLeft==null) ||
@@ -441,8 +541,8 @@ grrid.Grid = Class.create({
                 var ajaxParams = $H({
                     new_x: this._currentTopLeft[0],
                     new_y: this._currentTopLeft[1],
-                    number_of_cells_x: this._numberOfCellsX,
-                    number_of_cells_y: this._numberOfCellsY
+                    number_of_cells_x: this._getNumberOfCellsX()+2,
+                    number_of_cells_y: this._getNumberOfCellsY()+2
                 });
 
                 // if the prevTopLeft variable has a value, add the old x and y coords to the request.
@@ -455,37 +555,53 @@ grrid.Grid = Class.create({
 
 
                 new Ajax.Request(url, {
-                    method: 'post',
+                    method: 'get',
                     parameters: ajaxParams,
-                    // for some reason, if we use onSuccess here, the highlighting doesn't work!
-                    onComplete: function(transport) {                      
-                        // if we have a selection saved, (but we're not CURRENTLY selecting)
-                        // work out which cells need to be highlighted
-                        if(this._selectedCells.length > 0 && !this._selecting) {
-                            this._calculateSelectedCells(this._selectStartCoords[0], this._selectStartCoords[1], this._selectEndCoords[0], this._selectEndCoords[1]);
-                        }
-                        if(this._selectedColumnIndex){
-                            highlightSelectedCells();
-                        }
-                        this._prevTopLeft = this._currentTopLeft;
-                        this._checkingCells = false; // mark us as not checking any more.
+                    onCreate: function(transport) {
+                        this._checkCellsAjaxCreate(transport);
+                    }.bind(this),
+                    onComplete: function(transport) {
+                        this._checkCellsAjaxComplete(transport);
                     }.bind(this) // bind to the current instance!
                 });
             }
             else {
                 // it's the same location - don't bother checking.
                 this._checkingCells = false;
+                this._showHideFetchingDataIndicator(false);
             }
-        } 
+        }
+    },
+
+    // override if you want to do something special when starting to check cells.
+    _checkCellsAjaxCreate: function(transport) {
+	  // by default, this does nothing.	
+    },
+
+    _checkCellsAjaxComplete: function(transport) {
+        this._prevTopLeft = this._currentTopLeft;
+        this.visibleColumns.rewireEvents();
+        this._checkingCells = false; // mark us as not checking any more.
+        this._showHideFetchingDataIndicator(false);
+    },
+
+    _showHideFetchingDataIndicator: function(show) {
+        if (show){
+            $('gridProgress').show();
+        }
+        else {
+            // otherwise just hide it.
+            $('gridProgress').hide();
+        }
     },
 
     // utility funcs to work out the number of cells x and y.
     _getNumberOfCellsX: function() {
-        var noOfCells = Math.ceil(this.viewportWidth / this.cellWidth) +2;
+        var noOfCells = Math.ceil(this.viewportWidth / this.cellWidth);
         return noOfCells;
     },
     _getNumberOfCellsY: function() {
-        var noOfCells = Math.ceil(this.viewportHeight / this.cellHeight) +2;
+        var noOfCells = Math.ceil(this.viewportHeight / this.cellHeight);
         return noOfCells;
     },
 
@@ -494,129 +610,18 @@ grrid.Grid = Class.create({
         // are we in the cell area?
         if ( (Event.pointerX(event) > this.outerDiv.offsetLeft && Event.pointerX(event) < (this.outerDiv.offsetLeft + this.viewportWidth) ) &&
             (Event.pointerY(event)  > this.outerDiv.offsetTop && Event.pointerY(event) < (this.outerDiv.offsetTop + this.viewportHeight) )) {
-            // if so, clear out the selected area
+            // if so, clear out the selected column
             // (if not, we're either outside of the grid, or in the scrollbar, so we wanna keep the selection.)
-            this._selectedColumnIndex = null;
-            this._selectedCells = [];
-            this._clearHighlightedCells();
-        }
-
-        if(event.shiftKey) {
-            this._startSelect(event);
+            this.selectedColumn = null;
         }
 
     },
-
-
-    // deal with the mouse being moved about (only has any effect if currently selecting)
-    _mouseMove: function(event) {
-        if (this._selecting) {
-
-            var cellCoords = this._calculateWhichCell(Event.pointerX(event), Event.pointerY(event));
-
-            this._calculateSelectedCells(this._selectStartCoords[0], this._selectStartCoords[1], cellCoords[0], cellCoords[1]);
-
-            this._scrollIfNearEdge(Event.pointerX(event), Event.pointerY(event));
-            // make sure that we don't select the cells' text
-            // (note that IE needs this here)
-            Event.stop(event);
-        }
-    },
-
-    // if the coords passed are near the edge of the viewport, do some scrollin'
-    _scrollIfNearEdge: function(x,y) {
-        var scrollIncrement = 20; // how much to scroll by.
-        var scrollSensitivity = 20; // this is the size of the area near the edge of the viewport within which we want to cause a scroll
-
-        // work out the ranges of coordinates within which we want to scroll.
-
-        if ( x < this.outerDiv.offsetLeft + scrollSensitivity){
-            // scroll left a bit
-            this.outerDiv.scrollLeft = this.outerDiv.scrollLeft - scrollIncrement;
-        }
-
-        if ( x > (this.outerDiv.offsetLeft + this.viewportWidth - scrollSensitivity)){
-            // scroll right a bit
-            this.outerDiv.scrollLeft = this.outerDiv.scrollLeft + scrollIncrement;
-        }
-
-        if (y > this.outerDiv.offsetTop && x < this.outerDiv.offsetTop + scrollSensitivity){
-            // scroll up a bit
-            this.outerDiv.scrollTop = this.outerDiv.scrollTop - scrollIncrement;
-        }
-
-        if (y < (this.outerDiv.offsetTop + this.viewportHeight) && y > (this.outerDiv.offsetTop + this.viewportHeight - scrollSensitivity)){
-            // scroll down a bit
-
-            this.outerDiv.scrollTop = this.outerDiv.scrollTop + scrollIncrement;
-        }
-
-    },
-
-    // start making a selection of cells
-    _startSelect: function(event) {
-       
-        var cellCoords = this._calculateWhichCell(Event.pointerX(event), Event.pointerY(event));
-
-        this._selectStartCoords = cellCoords;
-        this._selectEndCoords = null;
-        this._calculateSelectedCells(this._selectStartCoords[0], this._selectStartCoords[1], cellCoords[0], cellCoords[1]);
-
-        this._selecting = true;
-
-        // make sure that we don't select the cells' text
-        // (note that FF and Saf needs this here)
-        Event.stop(event);
-        return false;
-
-    },
-
-    // deal with the mouse button being un-depressed over our grid
-    _mouseUp: function(event) {
-        // if we're selecting, finalise the selction.
-        if (this._selecting) {
-            var cellCoords = this._calculateWhichCell(Event.pointerX(event), Event.pointerY(event));
-            this._selectEndCoords = cellCoords;
-            this._calculateSelectedCells(this._selectStartCoords[0], this._selectStartCoords[1], cellCoords[0], cellCoords[1]);
-        }
-;
-        this._selecting = false;
-    },
-
-    // select a whole col: this is an event handler for the column indicator being clicked.
-    _selectEntireColumn: function(event) {
-
-        var data = $A(arguments);
-        data.shift(); // the next param is the column index.
-        var columnIndex = data[0];
-
-        // deselected any selected cell area
-        this._selectedCells = [];
-
-        // if they re-clicked on the currently selected column,
-        // they are trying to unselect it.
-        if (this._selectedColumnIndex != null
-            && this._selectedColumnIndex == columnIndex) {
-            this._selectedColumnIndex = null;
-        }
-        else {
-            this._selectedColumnIndex = columnIndex;
-        }
-
-  
-        // after remembering which column is selected, do the highlighting
-        this._highlightSelectedCells();
-    },
-
-
+   
     // what to do when we get a scroll event
     _processScroll: function(event) {
-        this._generateColumnIndicators();
-        this._generateRowIndicators();
+        this._generateIndicators();
         this._checkCells();
     }
-
-
 
 });
 
@@ -648,8 +653,7 @@ grrid.Grid.calculateColumnName = function(index){
         prefixLetter = String.fromCharCode(65+prefixLetter);
     }
 
-    // We don't bother going any higher than a series of two chars
-    // TODO: restrict the number of cols on the server to less than 26*26
+    // We don't bother going any higher than a series of two chars, due to limit of 500 cols on svr.
     return prefixLetter + finalLetter;
 
 }
@@ -699,42 +703,38 @@ grrid.Cell = Class.create({
 
     // add this cell to the grid passed.
     addToGrid: function(grid) {
-        
-        var cellClass = "grid-cell cell-row" + this._y.toString() + " cell-col" + this._x.toString();
-        var inputClass = "grid-cell-input input-row" + this._y.toString() + " input-col" + this._x.toString();
-
+           
         // before isnerting, check for unsynched data for this cell
-        var unsynchedCellValue = grid.changedCellValues.getValue(this._x,this._y);        
+        var unsynchedCellValue = grid.changedCellValues.getValue(this._x,this._y);
         if (unsynchedCellValue != null){
             this.setValue(unsynchedCellValue);
         }
 
         // make the input
         var theInput = new Element('input', {
-            'class': inputClass,
             'id': this._inputName,
             'value': this._value,
-            'maxLength': 255, // default max length is 255 to support default varchar length with rails.
-            'tabIndex': ((this._y+1) * 1000) + (this._x) // assume never more than 1000 cols!
+            'maxLength': 255 // default max length is 255 to support default varchar length with rails.
+        // don't worry about tab order - we deal with that via events
         });
 
+        this._setInputClass(grid, theInput);
+        
         // wire up observers, making sure we have the correct bindings. The first object we're passing
         // to the event listener is the current instance of our cell object (this).
         // see: http://alternateidea.com/blog/articles/2007/7/18/javascript-scope-and-binding
         // and: http://www.prototypejs.org/api/function/bindAsEventListener
         theInput.observe('focus', this._textFieldFocus.bindAsEventListener(this, grid) );
         theInput.observe('blur', this._textFieldBlur.bindAsEventListener(this, grid) );
-
-        // make the cell readonly if the grid is not in edit mode
-        if(!grid.editMode) {
-            theInput.writeAttribute('readonly', 'readonly');
-        }
+        theInput.observe('keydown', this._textFieldKeyDown.bindAsEventListener(this, grid) );
 
         // set the input's style.
         theInput.setStyle({
-            height: (grid.cellHeight-2).toString() + "px",
+            height: (grid.cellHeight-1).toString() + "px",
             width: (grid.cellWidth-1).toString() + "px"
         });
+
+        var cellClass = "grid-cell cell-row" + this._y.toString() + " cell-col" + this._x.toString();
 
         // make the cell and whack the input inside it.
         var theCell = new Element('div', {
@@ -755,7 +755,9 @@ grrid.Cell = Class.create({
         grid.innerDiv.insert({
             bottom:theCell
         });
+
     },
+
 
     // is the cell passed the same cell as THIS one.
     // i.e. do the coords match
@@ -767,7 +769,7 @@ grrid.Cell = Class.create({
     },
 
     // remove the cell from the grid passed
-    removeFromGrid: function(grid) {    
+    removeFromGrid: function(grid) {
         var cellName = grrid.Grid.generateCellNameFromCoords(this._x, this._y);
         var thisCell = $(cellName);
         
@@ -793,8 +795,15 @@ grrid.Cell = Class.create({
         return false;
     },
 
+    _setInputClass: function(grid, theInput) {
+        theInput.addClassName('grid-cell-input');
+        theInput.addClassName('input-row' + this._y.toString());
+        theInput.addClassName('input-col' + this._x.toString());
+    },
+
     // deal with a this cell's field losing focus.
     _textFieldBlur: function(event) {
+
         var element = Event.element(event);
 
         // the grid is passed as the 2nd param
@@ -807,18 +816,116 @@ grrid.Cell = Class.create({
     },
 
     // deal with this cell's text field attaining focus
-    _textFieldFocus: function(event) {
+    _textFieldFocus: function(event, grid) {
         var element = Event.element(event);
-
-        // the grid is passed as the 2nd param
-        var grid = $A(arguments)[1];
 
         grid.lastFocusedCell = this;
         this._oldValue = element.value; // remember the value this cell started with.
+
+        // scroll if near the edge of the cells actually visible in the view port.
+        var min_x = grid._currentTopLeft[0]+1;
+        var min_y = grid._currentTopLeft[1]+1;
+        var max_x = grid._currentTopLeft[0] + grid._getNumberOfCellsX()-1;
+        var max_y = grid._currentTopLeft[1] + grid._getNumberOfCellsY()-1;
+
+        if (this.getX() <= (min_x)) {
+            grid.outerDiv.scrollLeft = grid.outerDiv.scrollLeft - grid.cellWidth;
+        }
+        else if (this.getX() >= (max_x)) {
+            grid.outerDiv.scrollLeft = grid.outerDiv.scrollLeft + grid.cellWidth;
+        }
+
+        if (this.getY() <= (min_y)) {
+            grid.outerDiv.scrollTop = grid.outerDiv.scrollTop - grid.cellHeight;
+        }
+        else if (this.getY() >= (max_y)) {
+            grid.outerDiv.scrollTop = grid.outerDiv.scrollTop + grid.cellHeight;
+        }
+
+
+    },
+    
+    _textFieldKeyDown: function(event) {
+        
+        if (event.keyCode == Event.KEY_DOWN || event.keyCode == Event.KEY_RETURN) {
+            Event.stop(event);
+            var inputDown = $( grrid.Grid.generateInputNameFromCoords( this.getX(), this.getY()+1 ));
+            if (inputDown != null) {
+                Form.Element.activate(inputDown);
+            }
+
+        }
+        else if(event.keyCode == Event.KEY_UP) {
+            Event.stop(event);
+            var inputUp = $( grrid.Grid.generateInputNameFromCoords( this.getX(), this.getY()-1 ));
+            if (inputUp != null) {
+                Form.Element.activate(inputUp);
+            }
+        }
+        else if(event.keyCode == Event.KEY_RIGHT || event.keyCode == Event.KEY_TAB ) {
+            Event.stop(event);
+            var inputRight = $( grrid.Grid.generateInputNameFromCoords( this.getX()+1, this.getY() ));
+            if (inputRight != null) {
+                Form.Element.activate(inputRight);
+            }
+            
+        }
+        else if(event.keyCode == Event.KEY_LEFT) {
+            Event.stop(event);
+            var inputLeft = $( grrid.Grid.generateInputNameFromCoords( this.getX()-1, this.getY() ));
+            if (inputLeft != null) {
+                Form.Element.activate(inputLeft);
+            }
+        }
+
     }
 
-}
-);
+});
+
+// class to represent a column in the grid
+grrid.Column = Class.create({
+
+    _position: null,
+    _columnName: null,
+
+    getPosition: function(){
+        return this._position;
+    },
+
+    initialize: function(position) {
+        this._position = position;
+        this._columnName = grrid.Grid.calculateColumnName(position);
+    },
+
+    wireEvents: function(grid) {
+        // for columns, we don't actually need to add a physical html element,
+        // as this is done by the generateColumnIndicators stuff
+
+        // just find the right column indicator div
+        var columnIndicatorName = 'columnIndicator-' + this._position.toString();
+        var colIndicatorDiv = $(columnIndicatorName);
+        if (colIndicatorDiv) {
+            colIndicatorDiv.observe('click', this._selectColumn.bindAsEventListener(this, grid));
+        }
+      
+    },
+
+    unwireEvents: function() {
+        // just find the right column indicator div
+        var columnIndicatorName = 'columnIndicator-' + this._position.toString();
+        var colIndicatorDiv = $(columnIndicatorName);
+        if (colIndicatorDiv) {
+            Event.stopObserving(colIndicatorDiv, 'click')
+        }
+
+    },
+
+    // select a whole col: this is an event handler for the column indicator being clicked.
+    _selectColumn: function(event, grid) {
+        grid.selectedColumn = this;
+    }
+
+});
 
 // class to represent the collection of visible cells in a grid
 grrid.VisibleCellCollection = Class.create({
@@ -842,17 +949,59 @@ grrid.VisibleCellCollection = Class.create({
     // removes a cell from the collection
     remove: function(x,y) {
         var cellToRemove = this.getCell(x,y);
-        cellToRemove.removeFromGrid(this._grid);
-        this._visibleCells.unset([x,y]);     
+        if (cellToRemove != null) {
+            cellToRemove.removeFromGrid(this._grid);
+        }
+        this._visibleCells.unset([x,y]);
     },
 
     // get the cell from the collection, at the given coords
-    getCell: function(x,y) {    
+    getCell: function(x,y) {
         return this._visibleCells.get([x,y]);
     }
     
 });
 
+// class to hold a collection of grid columns, which are visible in the grid.
+grrid.VisibleColumnCollection = Class.create();
+Object.extend(grrid.VisibleColumnCollection.prototype, Enumerable); // mix in enumerable
+Object.extend(grrid.VisibleColumnCollection.prototype, {
+
+    _visibleColumns: $H({}),
+    _grid: null,
+
+    initialize: function(grid) {
+        this._grid = grid;
+    },
+
+    // the iterator for enumerable for
+    _each: function(iterator) {
+        this._visibleColumns.each( function(column) {
+            iterator(column);
+        });
+    },
+
+    add: function(position, column) {
+        this._visibleColumns.set(position, column);
+    },
+    
+    remove: function(position) {
+        this._visibleColumns.unset(position);
+    },
+
+    getColumn: function(position) {
+        return this._visibleColumns.get(position);
+    },
+
+    // cause all of the columns in the collection to have their events re wired up.
+    rewireEvents: function() {
+        this._visibleColumns.each(function(pair) {
+            pair.value.unwireEvents(this._grid);
+            pair.value.wireEvents(this._grid);            
+        }.bind(this));
+
+    }
+});
 
 
 grrid.ChangedCellValueCollection = Class.create({
