@@ -1,4 +1,4 @@
-// Grrid v0.2.2
+// Grrid v0.2.3
 // Copyright (c) 2009 Swirrl IT Limited
 // Grrid is provided under an MIT-licence.
 
@@ -22,7 +22,7 @@ grrid.Grid = Class.create({
     // PUBLIC PROPERTIES
     cellHeight: 18,
     cellWidth: 100,
-    viewportWidth: 935, // the width and height of the view port, with defaults
+    viewportWidth: 875, // the width and height of the view port, with defaults
     viewportHeight: 280,
     outerDivBorderWidth: 1,
     outerDiv: null,  // a reference to the outerDiv and innerDiv.
@@ -104,10 +104,13 @@ grrid.Grid = Class.create({
         rowIndicators.setStyle({
             width: totalWidth + 'px'
         });
-
+        
         var rowIndicatorsMargin = parseInt(rowIndicators.getStyle('marginLeft'));
-        totalWidth += rowIndicatorsMargin;
-
+        
+        if (rowIndicatorsMargin) {
+          totalWidth += rowIndicatorsMargin;
+        }
+              
         $('outerColumnIndicatorsDiv').setStyle({
             marginLeft: (totalWidth + 2).toString() + 'px'
         });
